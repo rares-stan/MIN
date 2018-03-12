@@ -5,7 +5,7 @@ import copy
 
 discretization = 100
 function_dimensions = {
-    'rastrigin': 30,
+    'rastrigin': 10,
     'griewangk': 2,
     'rosenbrock': 2,
     'six_hump': 2
@@ -80,15 +80,24 @@ def get_normal_values(chromosome, function_name):
     return x
 
 
-def check_fitness(chromosome, function_name):
+def apply_function(chromosome, function_name):
     real_values = get_normal_values(chromosome, function_name)
     return functions[function_name](real_values)
+
+
+def flip_bit(bit):
+    return (bit + 1) % 2
+
+
+def flip_bit_from_list(bit_list, position):
+    bit_list[position] = flip_bit(bit_list[position])
+    return bit_list
 
 
 def hillclimbing(function_name, iterations=1000, best_improvement=False):
     iteration_number = 0
     chromosome = initialize_chromosome(function_name)
-    best_fitness = check_fitness(chromosome, function_name)
+    best_fitness = apply_function(chromosome, function_name)
     temp_chromosome = None
     temp_best_fitness = best_fitness
     print('initial fitness', best_fitness)
@@ -100,8 +109,8 @@ def hillclimbing(function_name, iterations=1000, best_improvement=False):
         shuffled_indexes = range(len(chromosome['value']))
         for i in shuffled_indexes:
             neighbour = copy.deepcopy(chromosome)
-            neighbour['value'][i] = (neighbour['value'][i] + 1) % 2
-            current_fitness = check_fitness(neighbour, function_name)
+            neighbour['value'] = flip_bit_from_list(neighbour['value'], i)
+            current_fitness = apply_function(neighbour, function_name)
             if current_fitness < temp_best_fitness:
                 temp_chromosome = neighbour
                 temp_best_fitness = current_fitness
@@ -115,17 +124,124 @@ def hillclimbing(function_name, iterations=1000, best_improvement=False):
     return chromosome, best_fitness
 
 
-for restart in range(1):
-    name = 'rastrigin'
+def mutate_population(population, mutation_chance):
+    map(lambda chromosome:
+            map(lambda gene:
+                    random.random() < mutation_chance if flip_bit(gene) else gene,
+                chromosome),
+        population)
+    return population
+
+
+def crossover(p1, p2):
+    position = random.randint(1, len(p1) - 2)
+    o1 = p1[:position] + p2[position:]
+    o2 = p2[:position] + p1[position:]
+    return o1, o2
+
+
+def get_crossover_populations(population, crossover_chance):
+    pop_probability = list(zip(population, [random.random() for _ in range(len(population))]))
+    pop_for_crossover = list(filter(lambda p: p[1] < crossover_chance, pop_probability))
+    pop_for_crossover = sorted(pop_for_crossover, key=lambda x: x[1])
+    rest = list(filter(lambda x: x[1] >= crossover_chance, pop_probability))
+    if len(pop_for_crossover) % 2 == 1:
+        if random.random() > 0.5:
+            prob_min = min(rest, key=lambda x: x[1])
+            pop_for_crossover.append(prob_min)
+            rest.remove(prob_min)
+        else:
+            rest.append(pop_for_crossover.pop())
+    rest = list(list(zip(*rest))[0])
+    pop_for_crossover, prob = zip(*pop_for_crossover)
+    p1 = [pop_for_crossover[i] for i in range(0, len(pop_for_crossover), 2)]
+    p2 = [pop_for_crossover[i] for i in range(1, len(pop_for_crossover), 2)]
+    return p1, p2, rest
+
+
+def crossover_population(population, crossover_chance):
+    p1, p2, rest = get_crossover_populations(population, crossover_chance)
+    pop = list(zip(p1, p2))
+    pop = list(map(lambda x: crossover(*x), pop))
+    p1, p2 = zip(*pop)
+    return list(p1) + list(p2) + rest
+
+
+def initialize_population(function_name, pop_size):
+    dimensions = initialize_chromosome(function_name)['dimensions']
+    return {'values': [initialize_chromosome(function_name)['value'] for _ in range(pop_size)], 'dimensions': dimensions}
+
+
+def evaluate_population(population, function_name):
+    a = 1
+    return list(map(lambda x: apply_function({'value': x, 'dimensions': population['dimensions']}, function_name), population['values']))
+
+
+def calculate_fitness(results):
+    c = max(results) + 1
+    return map(lambda x: -1 * x + c, results)
+
+
+def calculate_chances(fitness, total):
+    chances = [fitness[0]/total]
+    for i in range(1, len(fitness)):
+        chances.append(chances[-1] + fitness[i]/total)
+    return chances
+
+
+def find_min_grater(chances, number):
+    for i in range(0, len(chances)):
+        if chances[i] > number:
+            return i
+
+
+def generation_selection(population, fitness):
+    total_fitness = sum(fitness, 0)
+    chances = calculate_chances(fitness, total_fitness)
+    new_pop = list(map(lambda x: population['values'][find_min_grater(chances, x)], [random.random() for _ in range(len(fitness))]))
+    return {'values': new_pop, 'dimensions': population['dimensions']}
+
+
+def ga_step(population, function_name, mutation_chance, crossover_chance):
+    bit_mutation_chance = 1 - (1 - mutation_chance) ** (1/sum(population['dimensions']))
+    population['values'] = crossover_population(population['values'], crossover_chance)
+    population['values'] = mutate_population(population['values'], bit_mutation_chance)
+    results = evaluate_population(population, function_name)
+    print(min(results))
+    fitness = list(calculate_fitness(results))
+    return generation_selection(population, fitness)
+
+
+def genetic_algorithm(function_name, pop_size=100, generations=100):
+    pop = initialize_population(function_name, pop_size)
+    for _ in range(generations):
+        pop = ga_step(pop, function_name, 0.3, 0.7)
+
+
+def only_hillclimbing(iterations):
+    for restart in range(iterations):
+        # name = 'rastrigin'
+        # name = 'griewangk'
+        # name = 'rosenbrock'
+        name = 'six_hump'
+        print('First improvement')
+        val = hillclimbing(name, iterations=100)
+        print(val)
+        print(get_normal_values(val[0], name), val[1])
+        print('------------------------------------------------------------------')
+        print('Best improvement')
+        val = hillclimbing(name, iterations=1000, best_improvement=True)
+        print(val)
+        print(get_normal_values(val[0], name), val[1])
+
+
+def call_ga():
+    # name = 'rastrigin'
     # name = 'griewangk'
     # name = 'rosenbrock'
-    # name = 'six_hump'
-    print('First improvement')
-    val = hillclimbing(name, iterations=1000)
-    print(val)
-    print(get_normal_values(val[0], name), val[1])
-    print('------------------------------------------------------------------')
-    print('Best improvement')
-    val = hillclimbing(name, iterations=1000, best_improvement=True)
-    print(val)
-    print(get_normal_values(val[0], name), val[1])
+    name = 'six_hump'
+    genetic_algorithm(name, pop_size=300, generations=1000)
+
+
+# only_hillclimbing(1)
+call_ga()
