@@ -5,7 +5,7 @@ import copy
 
 discretization = 100
 function_dimensions = {
-    'rastrigin': 15,
+    'rastrigin': 30,
     'griewangk': 2,
     'rosenbrock': 3,
     'six_hump': 2
@@ -244,7 +244,7 @@ def ga_step(population, function_name, mutation_chance, crossover_chance, hill_c
 def genetic_algorithm(function_name, pop_size=100, generations=100, use_hill_climbing=True):
     pop = initialize_population(function_name, pop_size)
     for _ in range(generations):
-        pop = ga_step(pop, function_name, 0.3, 0.7, 0.15, use_hill_climbing)
+        pop = ga_step(pop, function_name, 0.3, 0.7, 0.05, use_hill_climbing)
 
 
 def only_hill_climbing(iterations):
