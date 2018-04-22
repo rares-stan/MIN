@@ -6,8 +6,8 @@ import copy
 discretization = 100
 function_dimensions = {
     'rastrigin': 30,
-    'griewangk': 2,
-    'rosenbrock': 3,
+    'griewangk': 30,
+    'rosenbrock': 30,
     'six_hump': 2
 }
 function_domains = {
@@ -94,7 +94,8 @@ def flip_bit_from_list(bit_list, position):
     return bit_list
 
 
-def hill_climbing(function_name, start_chromosome=None, iterations=1000, best_improvement=False):
+def hill_climbing(function_name, max_eval, start_chromosome=None, iterations=1000, best_improvement=False):
+    global eval_calls
     iteration_number = 0
     chromosome = start_chromosome if start_chromosome else initialize_chromosome(function_name)
     best_fitness = apply_function(chromosome, function_name)
@@ -110,6 +111,9 @@ def hill_climbing(function_name, start_chromosome=None, iterations=1000, best_im
         for i in shuffled_indexes:
             neighbour = copy.deepcopy(chromosome)
             neighbour['values'] = flip_bit_from_list(neighbour['values'], i)
+            eval_calls += 1
+            if eval_calls > max_eval:
+                return chromosome, best_fitness
             current_fitness = apply_function(neighbour, function_name)
             if current_fitness < temp_best_fitness:
                 temp_chromosome = neighbour
@@ -172,12 +176,13 @@ def crossover_population(population, crossover_chance):
     return list(p1) + list(p2) + rest
 
 
-def hybridise_hill_climbing(population, function_name, mutate_chance):
+def hybridise_hill_climbing(population, function_name, mutate_chance, max_eval):
     return list(
         map(
             lambda chromosome:
                 hill_climbing(
                     function_name,
+                    max_eval,
                     {'values': chromosome, 'dimensions': population['dimensions']},
                     iterations=1,
                     best_improvement=False
@@ -195,6 +200,8 @@ def initialize_population(function_name, pop_size):
 
 
 def evaluate_population(population, function_name):
+    global eval_calls
+    eval_calls += len(population['values'])
     return list(map(lambda x: apply_function({'values': x, 'dimensions': population['dimensions']}, function_name), population['values']))
 
 
@@ -228,23 +235,29 @@ def generation_selection(population, fitness):
     return {'values': new_pop, 'dimensions': population['dimensions']}
 
 
-def ga_step(population, function_name, mutation_chance, crossover_chance, hill_climbing_chance, use_hill_climbing):
+def ga_step(population, function_name, mutation_chance, crossover_chance, hill_climbing_chance, use_hill_climbing, max_eval):
     bit_mutation_chance = 1 - (1 - mutation_chance) ** (1/sum(population['dimensions']))
     population['values'] = crossover_population(population['values'], crossover_chance)
     population['values'] = mutate_population(population['values'], bit_mutation_chance)
-    population['values'] = hybridise_hill_climbing(population, function_name, hill_climbing_chance) if use_hill_climbing else None
+    if use_hill_climbing:
+        population['values'] = hybridise_hill_climbing(population, function_name, hill_climbing_chance, max_eval)
     results = evaluate_population(population, function_name)
     best_chromosome = min(list(zip(population['values'], results)), key=lambda x: x[1])
     # print(get_normal_values({'values': best_chromosome[0], 'dimensions': population['dimensions']}, function_name), best_chromosome[1])
-    print(best_chromosome[1])
+    # print(best_chromosome[1])
     fitness = list(calculate_fitness(results))
-    return generation_selection(population, fitness)
+    return generation_selection(population, fitness), best_chromosome[1]
 
 
-def genetic_algorithm(function_name, pop_size=100, generations=100, use_hill_climbing=True):
+def genetic_algorithm(function_name, max_eval, pop_size=100, generations=100, use_hill_climbing=True):
     pop = initialize_population(function_name, pop_size)
-    for _ in range(generations):
-        pop = ga_step(pop, function_name, 0.3, 0.7, 0.05, use_hill_climbing)
+    best_val = None
+    # for _ in range(generations):
+    #     pop = ga_step(pop, function_name, 0.3, 0.7, 0.05, use_hill_climbing, max_eval)
+    while eval_calls <= max_eval:
+        pop, pop_best = ga_step(pop, function_name, 0.3, 0.7, 0.05, use_hill_climbing, max_eval)
+        best_val = best_val if best_val and best_val < pop_best else pop_best
+    print(best_val)
 
 
 def only_hill_climbing(iterations):
@@ -265,12 +278,19 @@ def only_hill_climbing(iterations):
 
 
 def call_ga():
-    name = 'rastrigin'
+    # name = 'rastrigin'
     # name = 'griewangk'
-    # name = 'rosenbrock'
+    name = 'rosenbrock'
     # name = 'six_hump'
-    genetic_algorithm(name, pop_size=500, generations=500, use_hill_climbing=True)
+    genetic_algorithm(name, max_eval=100000, pop_size=100, generations=500, use_hill_climbing=False)
 
+
+# eval_calls = 0
 
 # only_hill_climbing(1)
-call_ga()
+# call_ga()
+
+for _ in range(30):
+    eval_calls = 0
+    call_ga()
+    bbbbb = 1
