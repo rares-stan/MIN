@@ -48,7 +48,7 @@ functions = {
 }
 
 
-def init_population(pop_size, vmax, function_name):
+def pso_init_population(pop_size, vmax, function_name):
     current_domain = function_domains[function_name]
     dimension = function_dimensions[function_name]
     x = np.array([
@@ -68,46 +68,50 @@ def init_population(pop_size, vmax, function_name):
     return x, v
 
 
-def update_particle(current_x, current_v, vmax, global_best, particle_best, w):
+def pso_update_particle(current_x, current_v, vmax, global_best, particle_best, w):
     new_velocity = w[0]*current_v + w[1]*random.random()*(global_best - current_x) + w[2]*random.random()*(particle_best - current_x)
     new_velocity = np.array(list(map(lambda x: x[1] if x[1] <= vmax[x[0]] else vmax[x[0]], enumerate(new_velocity))))
     new_x = current_x + new_velocity
     return new_x, new_velocity
 
 
-def update_population(x, v, vmax, global_best, particle_best, w, function_name):
+def pso_update_population(x, v, vmax, global_best, particle_best, w, function_name):
     new_x = np.array([None]*len(x))
     new_v = np.array([None]*len(v))
     for i in range(len(x)):
-        new_x[i], new_v[i] = update_particle(x[i], v[i], vmax, global_best, particle_best[i], w)
+        new_x[i], new_v[i] = pso_update_particle(x[i], v[i], vmax, global_best, particle_best[i], w)
     return new_x, new_v
 
 
-def evaluate_population(x, function_name):
+def pso_evaluate_population(x, function_name):
+    global current_eval
+    current_eval += len(x)
     return list(map(functions[function_name], x))
 
 
-def pso(function_name, w, vmax, pop_size, max_iterations):
+def pso(function_name, w, vmax, pop_size, max_iterations, max_eval):
     global_best = None
     particle_best = [None]*pop_size
-    x, v = init_population(pop_size, vmax, function_name)
+    x, v = pso_init_population(pop_size, vmax, function_name)
     iterations = 0
-    while iterations < max_iterations:
+    while current_eval < max_eval:
         iterations += 1
-        results = evaluate_population(x, function_name)
+        results = pso_evaluate_population(x, function_name)
         current_best = (results.index(min(results)), min(results))
         global_best = global_best if global_best and global_best[1] < current_best[1] else (x[current_best[0]], current_best[1])
         for i in range(len(results)):
             particle_best[i] = particle_best[i] if particle_best[i] and particle_best[i][1] < results[i] else (x[i], results[i])
-        x, v = update_population(x, v, vmax, global_best[0], list(zip(*particle_best))[0], w, function_name)
+        x, v = pso_update_population(x, v, vmax, global_best[0], list(zip(*particle_best))[0], w, function_name)
         w[0] = w[0] - 0.9/max_iterations
-        print(global_best[1])
+    print(global_best[1])
 
 
-current_function = 'rastrigin'
-# current_function = 'griewangk'
-# current_function = 'rosenbrock'
-# current_function = 'six_hump'
-hyper_w = [0.9, 2, 2]
-hyper_vmax = list(zip(*function_domains[current_function]))[1]
-pso(current_function, hyper_w, hyper_vmax, 20, 1000)
+for _ in range(30):
+    current_eval = 0
+    # current_function = 'rastrigin'
+    # current_function = 'griewangk'
+    current_function = 'rosenbrock'
+    # current_function = 'six_hump'
+    hyper_w = [0.9, 2, 2]
+    hyper_vmax = list(zip(*function_domains[current_function]))[1]
+    pso(current_function, hyper_w, hyper_vmax, 20, 1000, max_eval=100000)

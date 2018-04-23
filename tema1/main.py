@@ -2,12 +2,16 @@ import math
 from functools import reduce
 import random
 import copy
+import numpy as np
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
 
 discretization = 100
 function_dimensions = {
-    'rastrigin': 30,
-    'griewangk': 30,
-    'rosenbrock': 30,
+    'rastrigin': 10,
+    'griewangk': 10,
+    'rosenbrock': 10,
     'six_hump': 2
 }
 function_domains = {
@@ -250,6 +254,7 @@ def ga_step(population, function_name, mutation_chance, crossover_chance, hill_c
 
 
 def genetic_algorithm(function_name, max_eval, pop_size=100, generations=100, use_hill_climbing=True):
+    global medii
     pop = initialize_population(function_name, pop_size)
     best_val = None
     # for _ in range(generations):
@@ -257,7 +262,11 @@ def genetic_algorithm(function_name, max_eval, pop_size=100, generations=100, us
     while eval_calls <= max_eval:
         pop, pop_best = ga_step(pop, function_name, 0.3, 0.7, 0.05, use_hill_climbing, max_eval)
         best_val = best_val if best_val and best_val < pop_best else pop_best
-    print(best_val)
+        if use_hill_climbing:
+            medii['gah'][eval_calls] = (medii['gah'][eval_calls] + best_val) / 2
+        else:
+            medii['ga'][eval_calls] = (medii['ga'][eval_calls] + best_val) / 2
+    # print(best_val)
 
 
 def only_hill_climbing(iterations):
@@ -277,20 +286,122 @@ def only_hill_climbing(iterations):
         print(get_normal_values(val[0], name), val[1])
 
 
-def call_ga():
+def pso_init_population(pop_size, vmax, function_name):
+    current_domain = function_domains[function_name]
+    dimension = function_dimensions[function_name]
+    x = np.array([
+        np.array([
+            random.uniform(current_domain[i][0], current_domain[i][1])
+            for i in range(dimension)
+        ])
+        for _ in range(pop_size)
+    ])
+    v = np.array([
+        np.array([
+            random.uniform(-vmax[i], vmax[i])
+            for i in range(dimension)
+        ])
+        for _ in range(pop_size)
+    ])
+    return x, v
+
+
+def pso_update_particle(current_x, current_v, vmax, global_best, particle_best, w):
+    new_velocity = w[0]*current_v + w[1]*random.random()*(global_best - current_x) + w[2]*random.random()*(particle_best - current_x)
+    new_velocity = np.array(list(map(lambda x: x[1] if x[1] <= vmax[x[0]] else vmax[x[0]], enumerate(new_velocity))))
+    new_x = current_x + new_velocity
+    return new_x, new_velocity
+
+
+def pso_update_population(x, v, vmax, global_best, particle_best, w, function_name):
+    new_x = np.array([None]*len(x))
+    new_v = np.array([None]*len(v))
+    for i in range(len(x)):
+        new_x[i], new_v[i] = pso_update_particle(x[i], v[i], vmax, global_best, particle_best[i], w)
+    return new_x, new_v
+
+
+def pso_evaluate_population(x, function_name):
+    global current_eval
+    current_eval += len(x)
+    return list(map(functions[function_name], x))
+
+
+def pso(function_name, w, vmax, pop_size, max_iterations, max_eval):
+    global medii
+    global_best = None
+    particle_best = [None]*pop_size
+    x, v = pso_init_population(pop_size, vmax, function_name)
+    iterations = 0
+    while current_eval < max_eval:
+        iterations += 1
+        results = pso_evaluate_population(x, function_name)
+        current_best = (results.index(min(results)), min(results))
+        global_best = global_best if global_best and global_best[1] < current_best[1] else (x[current_best[0]], current_best[1])
+        medii['pso'][current_eval] = (medii['pso'][current_eval] + global_best[1]) / 2
+        for i in range(len(results)):
+            particle_best[i] = particle_best[i] if particle_best[i] and particle_best[i][1] < results[i] else (x[i], results[i])
+        x, v = pso_update_population(x, v, vmax, global_best[0], list(zip(*particle_best))[0], w, function_name)
+        w[0] = w[0] - 0.9/max_iterations
+    # print(global_best[1])
+
+
+def call_ga(use_hillclimbing):
     # name = 'rastrigin'
     # name = 'griewangk'
-    name = 'rosenbrock'
-    # name = 'six_hump'
-    genetic_algorithm(name, max_eval=100000, pop_size=100, generations=500, use_hill_climbing=False)
+    # name = 'rosenbrock'
+    name = 'six_hump'
+    genetic_algorithm(name, max_eval=50000, pop_size=100, generations=500, use_hill_climbing=use_hillclimbing)
+
+
+def call_pso():
+    # current_function = 'rastrigin'
+    # current_function = 'griewangk'
+    # current_function = 'rosenbrock'
+    current_function = 'six_hump'
+    hyper_w = [0.9, 2, 2]
+    hyper_vmax = list(zip(*function_domains[current_function]))[1]
+    pso(current_function, hyper_w, hyper_vmax, 20, 1000, max_eval=50000)
 
 
 # eval_calls = 0
 
 # only_hill_climbing(1)
 # call_ga()
-
+medii = {
+    'ga': [0]*51000,
+    'gah': [0]*51000,
+    'pso': [0]*51000
+}
 for _ in range(30):
     eval_calls = 0
-    call_ga()
-    bbbbb = 1
+    call_ga(False)
+print('finish ga')
+for _ in range(30):
+    eval_calls = 0
+    call_ga(True)
+print('finish gah')
+for _ in range(30):
+    current_eval = 0
+    call_pso()
+print('finish pso')
+
+new_gah_values = [0]*51000
+
+for i in range(509):
+    gah_val_initiale = medii['gah']
+    val_diferite = list(filter(lambda x: x != 0, gah_val_initiale[i*100+1:(i+1)*100]))
+    if len(val_diferite) > 0:
+        new_gah_values[(i + 1) * 100] = reduce(lambda acc, x: acc + x, val_diferite, 0) / len(val_diferite)
+medii['gah'] = new_gah_values
+
+
+ga_vals = list(zip(*filter(lambda x: x[1] != 0, enumerate(medii['ga']))))
+gah_vals = list(zip(*filter(lambda x: x[1] != 0, enumerate(medii['gah']))))
+pso_vals = list(zip(*filter(lambda x: x[1] != 0, enumerate(medii['pso']))))
+
+ga_plot = plt.plot(ga_vals[0], ga_vals[1], label='GA')
+gah_plot = plt.plot(gah_vals[0], gah_vals[1], label='GAH')
+pso_plot = plt.plot(pso_vals[0], pso_vals[1], label='PSO')
+plt.legend()
+plt.savefig('six_hump10.png')
