@@ -81,7 +81,8 @@ def pso(graph, pop_size, c1, c2, iterations):
 
 
 # current_graph = read_graph('instante/myciel7.col')
-# current_graph = read_graph('instante/miles1500.col')
+current_graph = read_graph('instante/miles1000.col')
+# current_graph = read_graph('instante/queen9_9.col')
 # current_graph = read_graph('instante/fpsol2.i.3.col')
-current_graph = read_graph('instante/inithx.i.1.col')
+# current_graph = read_graph('instante/inithx.i.3.col')
 pso(current_graph, 20, 2, 2, 1000)
